@@ -23,6 +23,8 @@ use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sie, stval, stvec,
 };
+use crate::task::TASK_MANAGER;
+use crate::timer::get_time_ms;
 
 global_asm!(include_str!("trap.S"));
 
@@ -53,6 +55,17 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             cx.sepc += 4;
+            // store system call id
+            let mut inner = TASK_MANAGER.inner.exclusive_access();
+            let current_task_id = inner.current_task;
+            // inner.tasks[current_task_id].task_cx.syscall_id = cx.x[17];
+            inner.syscall_cnt[cx.x[17]] += 1;
+            println!("{} += 1, now is {}", cx.x[17], inner.syscall_cnt[cx.x[17]]);
+            let fstrun = inner.tasks[current_task_id].first_run;
+            if fstrun {
+                inner.tasks[current_task_id].start_time = get_time_ms();
+            }
+            drop(inner);
             // get system call return value
             cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }

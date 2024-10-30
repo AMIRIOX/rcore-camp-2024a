@@ -3,6 +3,8 @@ use crate::{
     config::MAX_SYSCALL_NUM,
     task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
     timer::get_time_us,
+    timer::get_time_ms,
+    task::TASK_MANAGER,
 };
 
 #[repr(C)]
@@ -53,5 +55,21 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    -1
+    // 找到任务位置
+    // 查1. status 2. syscall_id + count 3. 距离第一次调用的时长
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current_task_id = inner.current_task;
+    let time = get_time_ms() - inner.tasks[current_task_id].start_time;
+    /*if inner.tasks[current_task_id].first_run {
+        return -1;
+    }*/
+    unsafe {
+        *_ti = TaskInfo{
+            status: inner.tasks[current_task_id].task_status,  // status
+            syscall_times: inner.syscall_cnt,       // syscall_times
+            time: time,                                        // time
+        }
+    }
+    drop(inner);
+    0
 }
